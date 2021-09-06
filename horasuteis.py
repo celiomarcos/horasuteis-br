@@ -6,8 +6,14 @@ from datetime import date
 import businesstimedelta
 import holidays
 
+
 import tkinter as tk
 from tkinter import TclError, filedialog, simpledialog, messagebox
+
+
+
+path_selecionado_pela_gui = 'dataspracomparar.csv'
+path_arquivo_cidades = 'cidades.csv'
 
 # tela usada na gui, inicia em None, porque precisa ser criada no ambiente
 win = None
@@ -17,10 +23,12 @@ except TclError:
     # se tentou criar, e deu problema (nao tem tela por ex), vai ficar win validando None, pra saber que nao pode usar win
     print('Ops... Não foi possível mostrar tela, use nome fixo de arquivo local')
     # usar um nome de arquivo local
-    path_selecionado_pela_gui = 'dataspracomparar.csv'
 else:
     win.withdraw()
-    path_selecionado_pela_gui = filedialog.askopenfilename(filetypes=[("Formato de planilhas", ".csv .xls .xlsx")])
+    path_selecionado_pela_gui = filedialog.askopenfilename(title="Base para comparar", filetypes=[("Formato de planilhas", ".csv .xls .xlsx")])
+
+    #pergunta qual arquivo de feriados das cidades
+    path_arquivo_cidades = filedialog.askopenfilename(title="Feriados das cidades", initialfile=path_arquivo_cidades, filetypes=[("Formato de planilhas", ".csv .xls .xlsx")])
     #TODO se cancelar esta tela, va gerar erro grave ao tentar abrir arquivo
 
 d1 = datetime.datetime.now()
@@ -45,11 +53,12 @@ horas_uteis = businesstimedelta.Rules([diadetrabalho])
 
 ###############################
 # carregar feriados regionais
-df_regionais = pandas.read_csv("holidays_city.csv", quoting=csv.QUOTE_NONE)
+# sep=None faz o pandas testar os separador ideal automaticamente
+df_regionais = pandas.read_csv(path_arquivo_cidades, sep=None, quoting=csv.QUOTE_NONE)
 
 
 #cabecalho do arquivo de entrada
-cabecalho_esperado = ['INICIO', 'FINAL', 'TEMPO', 'UF']
+cabecalho_esperado = ['INICIO', 'FINAL', 'SR', 'CODIGO', 'UF']
 cabecalho_output = cabecalho_esperado + ['TIME_REAL', 'TIME_OK', 'H_DECIMAL', 'CITY']
 
 quantidade_de_registros_gravados = 0
@@ -152,21 +161,34 @@ with open(path_selecionado_pela_gui,'r') as data_input:
                     # adiciona na variavel da saida
                     #row.append(businesshrs.difference(inicio, end))
                     bdiff = horas_uteis.difference(inicio, end)
-                    row['TIME_REAL'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
+                    row_saida['TIME_REAL'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
 
                     estado = row['UF']
                     if estado == "":
                         estado = 'SP'
                     feriados = holidays.BR(state=estado)
 
+                    if row['SR'] == "1-387314346760":
+                        print('chegou')
+
                     #adicionar os regionais
-                    city = row['CITY']
+                    city = row['CODIGO']
                     if city != '':
-                        requer_df = df_regionais[df_regionais['cod']==int(city)]
+                        requer_df = df_regionais[df_regionais['CODIGO_MUNICIPIO']==int(city)]
+
+                        #CODIGO_MUNICIPIO,DATE,UF,NOME_MUNICIPIO
                         if requer_df is not None:
-                            for r in requer_df['dt'].to_list():
-                                print("cidade: {} tem feriado em {}".format(city, r.replace('"', "").replace("'", "")))
-                            feriados.append(requer_df['dt'].to_list())
+                            for r in requer_df['DATE'].to_list():
+                                # limpar as aspas
+                                r = r.replace('"', "").replace("'", "").replace("-", "/")
+                                
+                                # converter a data em formato PT-BR para date de python
+                                dateObj = datetime.datetime.strptime(r, "%d/%m/%Y").date()
+                                
+                                #adicionar aos feriados a serem considerados
+                                feriados.append(dateObj)
+
+                                print("cidade: {} tem feriado em {}".format(city, r))
                         else:
                             print('n achou cidade')
 
@@ -175,13 +197,19 @@ with open(path_selecionado_pela_gui,'r') as data_input:
                     #horas_uteis = businesstimedelta.Rules([diadetrabalho, lunchbreak, regras_feriados])
                     businesshrs = businesstimedelta.Rules([diadetrabalho, regras_feriados])
                     bdiff = businesshrs.difference(inicio, end)
-                    row['TIME_OK'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
+                    row_saida['TIME_OK'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
 
                     _segs_por_dia = 24*60*60 # horas x minutos x segundos
                     #row['H_DECIMAL'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",") # formatar em float 0.00
-                    row['H_DECIMAL'] = "{}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",")
+                    row_saida['H_DECIMAL'] = "{}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",")
 
-                    all_rows.append(row)
+                    row_saida['INICIO'] = row['INICIO']
+                    row_saida['FINAL'] = row['FINAL']
+                    row_saida['SR'] = row['SR']
+                    row_saida['CODIGO'] = row['CODIGO']
+                    row_saida['UF'] = row['UF']
+
+                    all_rows.append(row_saida)
 
             except csv.Error as e:
                 print('erro lendo {}, linha {}: {}'.format(nome_arquivo_saida,reader.line_num-1, e))

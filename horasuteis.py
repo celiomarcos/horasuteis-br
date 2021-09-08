@@ -8,7 +8,7 @@ from tkinter import TclError, filedialog, messagebox, simpledialog
 import businesstimedelta
 import holidays
 import numpy as np
-import pandas
+import pandas as pd
 # essa lib carrega variaveis de ambiente e se n houver ele considerars as variaveis declaradas no arquivo .env
 from dotenv import load_dotenv
 
@@ -63,6 +63,7 @@ def main():
             else:
                 messagebox.showwarning(msg)
 
+            #encerra tudo
             exit()
 
         # primeiro testa se o nome do arquivo esta completo
@@ -96,7 +97,7 @@ def main():
 
             # sep=None faz o pandas testar os separador ideal automaticamente
             print("Abrindo arquivo Cidades {}".format(PATH_ARQUIVO_CIDADES))
-            df_regionais = pandas.read_csv(
+            df_regionais = pd.read_csv(
                 PATH_ARQUIVO_CIDADES, sep=None if DELIMITADOR == 'auto' else DELIMITADOR, quoting=csv.QUOTE_NONE)
 
             # TODO devia testar aqui se esta ok com esse arquivo..
@@ -242,6 +243,9 @@ def main():
                             estado = UF_DEFAULT
                         feriados = holidays.BR(state=estado)
 
+                        # armazenar aqui quantos feriados municipais encontrou
+                        quantos_feriados_municipio = 0
+
                         # adicionar os regionais SE conseguiu usar o arquivo de CIDADES
                         if df_regionais:
                             city = row['CODIGO']
@@ -261,10 +265,23 @@ def main():
                                         # adicionar aos feriados a serem considerados
                                         feriados.append(dateObj)
 
+                                        quantos_feriados_municipio += 1
                                         print("cidade: {} tem feriado em {}".format(city, r))
+                                    print('feriados no municipio {}: {}'.format(city, quantos_feriados_municipio))
                                 else:
-                                    print('n achou cidade')
+                                    print('n achou cidade {}'.format(city))
+                        
+                        # contar quantidade de feriados no periodo
+                        # quantos_feriados_total = 0
+                        # df = pd.DataFrame()
+                        # df['Datas'] = pd.date_range(inicio, end)
+                        # for val in df['Datas']:
+                        #     if str(val).split()[0] in feriados:
+                        #         quantos_feriados_total += 1
+                        # if quantos_feriados_total > 0:
+                        #     print('feriados total: {}'.format(quantos_feriados_total))
 
+                        #montar businesstimedelta com os feriados
                         regras_feriados = businesstimedelta.HolidayRule(
                             feriados)
 
@@ -284,6 +301,10 @@ def main():
                         row_saida['UF'] = row['UF']
 
                         all_rows.append(row_saida)
+
+                        #
+                        #print('pressando linha: {}'.format(reader.line_num-1))
+                        print(".", end =" ")
 
                 except csv.Error as e:
                     msg = 'erro lendo {}, linha {}: {}'.format(

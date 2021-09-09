@@ -4,6 +4,7 @@ import os
 import tkinter as tk
 from datetime import date
 from tkinter import TclError, filedialog, messagebox, simpledialog
+from progress.bar import FillingCirclesBar
 
 import businesstimedelta
 import holidays
@@ -120,7 +121,7 @@ def main():
                     filetypes=[("Tabela csv", "*.csv"), ("Documento texto", "*.txt")])
             if f is None:
                 # Se a seleção do local é cancelada, então é encerrado.
-                exit
+                return
             # extrair o filename do objeto retornado pela tela
             PATH_ARQUIVO_SAIDA = f.name
 
@@ -157,7 +158,7 @@ def main():
                 print(_msg)
             else:
                 messagebox.showerror("Arquivo inválido", _msg)
-            exit
+            return
 
         # Se deve ou nao usar um analisador de separador
         if DELIMITADOR.lower() == 'auto':
@@ -207,6 +208,12 @@ def main():
 
         # if 'minha ccoluna' not in headers or 'id_nome' not in headers:
         #    print('Arquivo CSV precisa ter as colunas "Minha Coluna" e a coluna "ID_Nome"')
+        
+        #maneira mais rapida que sei pra contar quantas linhas tem eh assim:
+        qt_rows = sum(1 for _ in reader)
+        data_input.seek(0)
+        reader.__init__(data_input, delimiter=separador)
+        print("arquivo tem {} rows".format(qt_rows))
 
         # abre arquivo de saida
         print("Abrindo arquivo de saida {}".format(PATH_ARQUIVO_SAIDA))
@@ -222,6 +229,8 @@ def main():
                 all_rows = []
 
                 try:
+                    bar = FillingCirclesBar('Calculando', max=qt_rows)
+
                     for row in reader:
                         row_saida = {}
 
@@ -247,7 +256,7 @@ def main():
                         quantos_feriados_municipio = 0
 
                         # adicionar os regionais SE conseguiu usar o arquivo de CIDADES
-                        if df_regionais:
+                        if df_regionais is not None:
                             city = row['CODIGO']
                             if city != '':
                                 requer_df = df_regionais[df_regionais['CODIGO_MUNICIPIO'] == int(city)]
@@ -304,7 +313,10 @@ def main():
 
                         #
                         #print('pressando linha: {}'.format(reader.line_num-1))
-                        print(".", end =" ")
+                        #print(".", end =" ")
+                        bar.next()
+                    
+                    bar.finish()
 
                 except csv.Error as e:
                     msg = 'erro lendo {}, linha {}: {}'.format(

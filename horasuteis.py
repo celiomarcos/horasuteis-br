@@ -16,7 +16,11 @@ from dotenv import load_dotenv
 
 # cabecalho do arquivo de entrada
 CABECALHO_ESPERADO = ['INICIO', 'FINAL', 'SR', 'CODIGO', 'UF']
+<<<<<<< HEAD
 CABECALHO_OUTPUT = CABECALHO_ESPERADO + ['TIME_REAL', 'TIME_OK', 'H_DECIMAL', 'CITY']
+=======
+CABECALHO_OUTPUT = CABECALHO_ESPERADO + ['CODIGO', 'TIME_REAL', 'TIME_OK', 'H_DECIMAL', 'HREAL_DECIMAL']
+>>>>>>> 64a4f7825971604a9cd2b083d37efa12af028276
 
 def main():
     # carregar as variaveis de ambiente
@@ -49,6 +53,7 @@ def main():
         if win is None:
             # pergunta no terminal
             PATH_ARQUIVO_BASE = input(
+<<<<<<< HEAD
                 "Informe o arquivo base para comparar (deixe em branco para cancelar): ")
         else:
             # ou pergunta em Dialog
@@ -63,6 +68,23 @@ def main():
                 print(msg)
             else:
                 messagebox.showwarning(msg)
+=======
+                "Informe o arquivo base para processar (deixe em branco para cancelar): ")
+        else:
+            # ou pergunta em Dialog
+            PATH_ARQUIVO_BASE = filedialog.askopenfilename(
+                title="Informe o arquivo CSV para processar",
+                filetypes=[("Comma Separated Values - CSV", ".csv")])
+
+        # se o usuario cancelar essa seleccao, retornara um None, entao interrompe programa pois esse arquivo eh fundamental
+        if PATH_ARQUIVO_BASE is None or PATH_ARQUIVO_BASE == '':
+            msg = "Você cancelou a seleção do arquivo ❌."
+    
+            if win is None:
+                print(msg)
+            else:
+                messagebox.showwarning('Seleção cancelada', msg)
+>>>>>>> 64a4f7825971604a9cd2b083d37efa12af028276
 
             #encerra tudo
             exit()
@@ -81,6 +103,7 @@ def main():
     if os.path.exists(PATH_ARQUIVO_CIDADES) is False:
         if win is None:
             PATH_ARQUIVO_CIDADES = input(
+<<<<<<< HEAD
                 "informe arquivo de feriados em cidades: ")
         else:
             PATH_ARQUIVO_CIDADES = filedialog.askopenfilename(
@@ -89,6 +112,16 @@ def main():
 
         if PATH_ARQUIVO_CIDADES is None or PATH_ARQUIVO_CIDADES == '':
             print("Usuário cancelou a seleção do CIDADES")
+=======
+                "Selecionar arquivo de feriados municipais com cod. IBGE: ")
+        else:
+            PATH_ARQUIVO_CIDADES = filedialog.askopenfilename(
+                title="Informe o arquivo com feriados de cidades",
+                filetypes=[("Formato de planilhas", ".csv")])
+
+        if PATH_ARQUIVO_CIDADES is None or PATH_ARQUIVO_CIDADES == '':
+            print("Usuário cancelou a seleção dos feriados municipais, continuando o calculo sem.")
+>>>>>>> 64a4f7825971604a9cd2b083d37efa12af028276
             PATH_ARQUIVO_CIDADES = None
         else:
             # primeiro testa se o nome do arquivo esta completo
@@ -97,7 +130,11 @@ def main():
                 PATH_ARQUIVO_CIDADES = os.path.join('.', PATH_ARQUIVO_CIDADES)
 
             # sep=None faz o pandas testar os separador ideal automaticamente
+<<<<<<< HEAD
             print("Abrindo arquivo Cidades {}".format(PATH_ARQUIVO_CIDADES))
+=======
+            print("Abrindo calendário de cidades {}".format(PATH_ARQUIVO_CIDADES))
+>>>>>>> 64a4f7825971604a9cd2b083d37efa12af028276
             df_regionais = pd.read_csv(
                 PATH_ARQUIVO_CIDADES, sep=None if DELIMITADOR == 'auto' else DELIMITADOR, quoting=csv.QUOTE_NONE)
 
@@ -112,7 +149,11 @@ def main():
     if os.path.exists(PATH_ARQUIVO_SAIDA):
         # confirma onde salvar o arquivo destino
         if win is None:
+<<<<<<< HEAD
             f = input("Informe Arquivo de saída: ")
+=======
+            f = input("Salvar arquivo de saída: ")
+>>>>>>> 64a4f7825971604a9cd2b083d37efa12af028276
         else:
             f = filedialog.asksaveasfile(
                     title="Informe Arquivo de saída",
@@ -157,7 +198,11 @@ def main():
             if win is None:
                 print(_msg)
             else:
+<<<<<<< HEAD
                 messagebox.showerror("Arquivo inválido", _msg)
+=======
+                messagebox.showerror("Arquivo inválido ☹", _msg)
+>>>>>>> 64a4f7825971604a9cd2b083d37efa12af028276
             return
 
         # Se deve ou nao usar um analisador de separador
@@ -189,7 +234,11 @@ def main():
 
         # get fieldnames from DictReader object and store in list
         headers = reader.fieldnames
+<<<<<<< HEAD
         print("Cabecalhos encontrados:" + str(headers))
+=======
+        print("Cabeçalhos encontrados:" + str(headers))
+>>>>>>> 64a4f7825971604a9cd2b083d37efa12af028276
 
         # if row != cabecalho_esperado:
         #    if win is None:
@@ -213,7 +262,11 @@ def main():
         qt_rows = sum(1 for _ in reader)
         data_input.seek(0)
         reader.__init__(data_input, delimiter=separador)
+<<<<<<< HEAD
         print("arquivo tem {} rows".format(qt_rows))
+=======
+        print("Quantidade de linhas do arquivo: {} rows".format(qt_rows))
+>>>>>>> 64a4f7825971604a9cd2b083d37efa12af028276
 
         # abre arquivo de saida
         print("Abrindo arquivo de saida {}".format(PATH_ARQUIVO_SAIDA))
@@ -238,9 +291,15 @@ def main():
                         end = datetime.datetime.strptime(row['FINAL'], FORMAT_DT_FINAL)
 
                         if inicio > end:
+<<<<<<< HEAD
                             msg = "Datas invertidas linha {}".format(reader.line_num-1)
                             arquivo_erros.write("{}\n".format(msg))
                             print('Gravou log: {}'.format(msg))
+=======
+                            msg = "Data retroativa linha {} SR: {}".format(reader.line_num-1, row['SR'])
+                            arquivo_erros.write("{}\n".format(msg))
+                            print('-- Gravou log: {}'.format(msg))
+>>>>>>> 64a4f7825971604a9cd2b083d37efa12af028276
 
                         # adiciona na variavel da saida
                         #row.append(businesshrs.difference(inicio, end))
@@ -278,7 +337,11 @@ def main():
                                         print("cidade: {} tem feriado em {}".format(city, r))
                                     print('feriados no municipio {}: {}'.format(city, quantos_feriados_municipio))
                                 else:
+<<<<<<< HEAD
                                     print('n achou cidade {}'.format(city))
+=======
+                                    print('Cidade não encontrada {}'.format(city))
+>>>>>>> 64a4f7825971604a9cd2b083d37efa12af028276
                         
                         # contar quantidade de feriados no periodo
                         # quantos_feriados_total = 0
@@ -298,10 +361,22 @@ def main():
                         businesshrs = businesstimedelta.Rules([diadetrabalho, regras_feriados])
                         bdiff = businesshrs.difference(inicio, end)
                         row_saida['TIME_OK'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
+<<<<<<< HEAD
 
                         _segs_por_dia = 24*60*60  # horas x minutos x segundos
                         # row['H_DECIMAL'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",") # formatar em float 0.00
                         row_saida['H_DECIMAL'] = "{}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",")
+=======
+                        row_saida['TIME_REAL'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
+                        _segs_por_dia = 24*60*60  # horas x minutos x segundos
+                        # row['H_DECIMAL'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",") # formatar em float 0.00
+                        #row_saida['H_DECIMAL'] = "{}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",")
+
+                        row_saida['H_DECIMAL'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",")
+                        
+                        row_saida['HREAL_DECIMAL'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",")
+                        
+>>>>>>> 64a4f7825971604a9cd2b083d37efa12af028276
 
                         row_saida['INICIO'] = row['INICIO']
                         row_saida['FINAL'] = row['FINAL']
@@ -319,7 +394,11 @@ def main():
                     bar.finish()
 
                 except csv.Error as e:
+<<<<<<< HEAD
                     msg = 'erro lendo {}, linha {}: {}'.format(
+=======
+                    msg = 'Erro ao ler {}, linha {}: {}'.format(
+>>>>>>> 64a4f7825971604a9cd2b083d37efa12af028276
                         PATH_ARQUIVO_SAIDA, reader.line_num-1, e)
                     if win is None:
                         print(msg)
@@ -331,9 +410,15 @@ def main():
                 quantidade_de_registros_gravados = len(all_rows)
 
     # finaliza com alguma msg pro usuario
+<<<<<<< HEAD
     msg = 'Processou {} registros'.format(quantidade_de_registros_gravados)
     if win:
         messagebox.showinfo("Encerrou", msg)
+=======
+    msg = 'Foram processados {} registros, verifique os logs no arquivo ".err" '.format(quantidade_de_registros_gravados)
+    if win:
+        messagebox.showinfo("Encerrado", msg)
+>>>>>>> 64a4f7825971604a9cd2b083d37efa12af028276
     print(msg)
 
 if __name__ == "__main__":

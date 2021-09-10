@@ -14,13 +14,9 @@ import pandas as pd
 import dotenv
 
 
-# cabecalho do arquivo de entrada
-CABECALHO_ESPERADO = ['INICIO', 'FINAL', 'SR', 'CODIGO', 'UF']
-CABECALHO_OUTPUT = CABECALHO_ESPERADO + ['CODIGO', 'TIME_REAL', 'TIME_OK', 'H_DECIMAL', 'HREAL_DECIMAL']
-
 def main():
     # carregar as variaveis de ambiente
-    dotenv_file = dotenv.find_dotenv() # soh q agora procura o arquivo .env no OS, pq vamos reutilizar ele depois
+    dotenv_file = dotenv.find_dotenv() # soh q agora procu5ra o arquivo .env no OS, pq vamos reutilizar ele depois
     dotenv.load_dotenv(dotenv_file)
 
     PATH_ARQUIVO_BASE = os.getenv('ARQUIVO_BASE', "")
@@ -30,6 +26,18 @@ def main():
     UF_DEFAULT = os.getenv('UF_DEFAULT', 'SP')
     FORMAT_DT_CIDADES = os.getenv('FORMAT_DT_CIDADES', "%d/%m/%Y")
     DELIMITADOR = os.getenv('DELIMITADOR', 'auto')
+
+    COL_DATA_A = os.getenv('COL_DATA_A', 'INICIO')
+    COL_DATA_B = os.getenv('COL_DATA_B', 'FINAL')
+    COL_COD = os.getenv('COL__COD', 'SR') 
+    COL_MUNICIPIO = os.getenv('COL_MUNICIO', 'CODIGO')
+    COL_UF = os.getenv('COL_UF', 'UF')
+
+    # cabecalho do arquivo de entrada
+    CABECALHO_ESPERADO = [COL_DATA_A, COL_DATA_B, COL_COD, COL_MUNICIPIO, COL_UF]
+    CABECALHO_OUTPUT = CABECALHO_ESPERADO + ['TIME_REAL', 'TIME_OK', 'H_DECIMAL', 'HREAL_DECIMAL']
+
+    #TODO montar os cabecalhos por aqui logo dps de definiar quais sao
 
     # tela usada na gui, inicia em None, porque precisa ser criada no ambiente
     win = None
@@ -60,27 +68,19 @@ def main():
         # se o usuario cancelar essa seleccao, retornara um None, entao interrompe programa pois esse arquivo eh fundamental
         if PATH_ARQUIVO_BASE is None or PATH_ARQUIVO_BASE == '':
             msg = "Você cancelou a seleção do arquivo ❌."
-    
             if win is None:
                 print(msg)
             else:
                 messagebox.showwarning('Seleção cancelada', msg)
-
             #encerra tudo
-            exit()
+            return
 
-        # primeiro testa se o nome do arquivo esta completo
-        if os.path.isabs(PATH_ARQUIVO_BASE) is False:
-            # monta um minimo completo aceitavel entao
-            PATH_ARQUIVO_BASE = os.path.join('.', PATH_ARQUIVO_BASE)
-
-            # retorna pro inicio desse while pra testar novamente se arquivo existe
-            continue
+        # sobe ali pro inicio desse while pra testar novamente se arquivo existe
 
     ###############################
     # carregar arquivo de feriados regionais
     df_regionais = None
-    if os.path.exists(PATH_ARQUIVO_CIDADES) is False:
+    if PATH_ARQUIVO_CIDADES != "" and os.path.exists(PATH_ARQUIVO_CIDADES) is False:
         if win is None:
             PATH_ARQUIVO_CIDADES = input(
                 "Selecionar arquivo de feriados municipais com cod. IBGE: ")
@@ -93,11 +93,6 @@ def main():
             print("Usuário cancelou a seleção dos feriados municipais, continuando o calculo sem.")
             PATH_ARQUIVO_CIDADES = None
         else:
-            # primeiro testa se o nome do arquivo esta completo
-            if os.path.isabs(PATH_ARQUIVO_CIDADES) is False:
-                # monta um minimo completo aceitavel entao
-                PATH_ARQUIVO_CIDADES = os.path.join('.', PATH_ARQUIVO_CIDADES)
-
             # sep=None faz o pandas testar os separador ideal automaticamente
             print("Abrindo calendário de cidades {}".format(PATH_ARQUIVO_CIDADES))
             try:
@@ -107,18 +102,17 @@ def main():
                 print('Arquivo está vazio: {}'.format(PATH_ARQUIVO_CIDADES))
             except:
                 print('Erro ao abrir {}'.format(PATH_ARQUIVO_CIDADES))
-            #else:
-                # TODO devia testar aqui se esta ok com esse arquivo..
-            finally:
-                # já q abriu, memoriza esse nome de arquivo pra facilitar na proxima execução
+            else:
+                # já q abriu, rememoriza esse nome de arquivo pra facilitar na proxima execução
                 dotenv.set_key(dotenv_file, 'ARQUIVO_CIDADES', PATH_ARQUIVO_CIDADES)
 
+                # TODO devia testar aqui se esta ok com esse arquivo..
 
     ##################################################
     # arquivo de saída
     d1 = datetime.datetime.now()
     arquivo_nome_com_data = d1.strftime("%Y%m%d_%H%M%S")
-    PATH_ARQUIVO_SAIDA = f'{arquivo_nome_com_data}.csv'
+    PATH_ARQUIVO_SAIDA = f'.\{arquivo_nome_com_data}.csv'
     # aqui eh o inverso, SE o arquivo de saida existir, dai pergunta um outro nome
     if os.path.exists(PATH_ARQUIVO_SAIDA):
         # confirma onde salvar o arquivo destino
@@ -206,13 +200,22 @@ def main():
         headers = reader.fieldnames
         print("Cabeçalhos encontrados:" + str(headers))
 
-        # if row != cabecalho_esperado:
-        #    if win is None:
-        #        print("Ops! Arquivo inválido! ☹")
-        #    else:
-        #        messagebox.showerror("Cabeçalho Inválido ☹", "Use estes separados por ponto e vírgula: {}".format(validado))
-        #    #de qquer forma encerra
-        #    exit
+        
+        # verificando se a primeira lista, contem na segunda para ser considerado verdadeiro
+
+        # essa comparação eh um pouco complexa de entender pois são dois objetos lists, 
+        if set(CABECALHO_ESPERADO).issubset(set(headers)) is False:
+            # sobre esse metodo de comparação, eh necessario observar que eh a mesma coisa que
+            # if CABECALHO_ESPERADO <= headers
+            # tanto um quanto o outro método, converte as listas para sets, o que significa que nao
+            # considera valores duplicados, não afetará neste caso, mas eh uma caracteristica interessante de observar
+
+            if win is None:
+               print("Ops! Cabecalho de Arquivo inválido! ☹")
+            else:
+               messagebox.showerror("Cabeçalho Inválido ☹", "Use estes separados por ponto e vírgula: {}".format(CABECALHO_ESPERADO))
+            #de qquer forma encerra
+            return
 
         # mudar essa validacao simples para
 
@@ -245,15 +248,16 @@ def main():
 
                 try:
                     bar = FillingCirclesBar('Calculando', max=qt_rows)
+                    bar.width = 50
 
                     for row in reader:
                         row_saida = {}
 
-                        inicio = datetime.datetime.strptime(row['INICIO'], FORMAT_DT_INICIO)
-                        end = datetime.datetime.strptime(row['FINAL'], FORMAT_DT_FINAL)
+                        inicio = datetime.datetime.strptime(row[COL_DATA_A], FORMAT_DT_INICIO)
+                        end = datetime.datetime.strptime(row[COL_DATA_B], FORMAT_DT_FINAL)
 
                         if inicio > end:
-                            msg = "Data retroativa linha {} SR: {}".format(reader.line_num-1, row['SR'])
+                            msg = "Data retroativa linha {} SR: {}".format(reader.line_num-1, row[COL_COD])
                             arquivo_erros.write("{}\n".format(msg))
                             print('-- Gravou log: {}'.format(msg))
 
@@ -262,7 +266,7 @@ def main():
                         bdiff = horas_uteis.difference(inicio, end)
                         row_saida['TIME_REAL'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
 
-                        estado = row['UF']
+                        estado = row[COL_UF]
                         if estado == "":
                             estado = UF_DEFAULT
                         feriados = holidays.BR(state=estado)
@@ -272,7 +276,7 @@ def main():
 
                         # adicionar os regionais SE conseguiu usar o arquivo de CIDADES
                         if df_regionais is not None:
-                            city = row['CODIGO']
+                            city = row[COL_MUNICIPIO]
                             if city != '':
                                 requer_df = df_regionais[df_regionais['CODIGO_MUNICIPIO'] == int(city)]
 
@@ -306,8 +310,7 @@ def main():
                         #     print('feriados total: {}'.format(quantos_feriados_total))
 
                         #montar businesstimedelta com os feriados
-                        regras_feriados = businesstimedelta.HolidayRule(
-                            feriados)
+                        regras_feriados = businesstimedelta.HolidayRule(feriados)
 
                         #horas_uteis = businesstimedelta.Rules([diadetrabalho, lunchbreak, regras_feriados])
                         businesshrs = businesstimedelta.Rules([diadetrabalho, regras_feriados])
@@ -323,11 +326,11 @@ def main():
                         row_saida['HREAL_DECIMAL'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",")
                         
 
-                        row_saida['INICIO'] = row['INICIO']
-                        row_saida['FINAL'] = row['FINAL']
-                        row_saida['SR'] = row['SR']
-                        row_saida['CODIGO'] = row['CODIGO']
-                        row_saida['UF'] = row['UF']
+                        row_saida[COL_DATA_A] = row[COL_DATA_A]
+                        row_saida[COL_DATA_B] = row[COL_DATA_B]
+                        row_saida[COL_COD] = row[COL_COD]
+                        row_saida[COL_MUNICIPIO] = row[COL_MUNICIPIO]
+                        row_saida[COL_UF] = row[COL_UF]
 
                         all_rows.append(row_saida)
 

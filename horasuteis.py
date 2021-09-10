@@ -14,6 +14,38 @@ import pandas as pd
 import dotenv
 
 
+class Calculadora:
+    def __init__(self):
+        ###############################
+        # definir um dia de e horário de trabalho
+        self.diadetrabalho = businesstimedelta.WorkDayRule(
+            start_time=datetime.time(8),
+            end_time=datetime.time(18),
+            working_days=[0, 1, 2, 3, 4])
+
+        # horario de almoco
+        self.lunchbreak = businesstimedelta.LunchTimeRule(
+            start_time=datetime.time(12),
+            end_time=datetime.time(13),
+            working_days=[0, 1, 2, 3, 4])
+
+        # combinar os dois
+        #horas_uteis = businesstimedelta.Rules([diadetrabalho, lunchbreak])
+        self.horas_uteis = businesstimedelta.Rules([self.diadetrabalho])
+
+    def horas_real(self, ini, fim):
+        bdiff = self.horas_uteis.difference(ini, fim)
+        return bdiff
+    
+    def horas_com_feriados(self, ini, fim, feriados):
+        #montar businesstimedelta com os feriados
+        regras_feriados = businesstimedelta.HolidayRule(feriados)
+
+        #horas_uteis = businesstimedelta.Rules([diadetrabalho, lunchbreak, regras_feriados])
+        businesshrs = businesstimedelta.Rules([self.diadetrabalho, regras_feriados])
+        bdiff = businesshrs.difference(ini, fim)
+        return bdiff
+
 def main():
     # carregar as variaveis de ambiente
     dotenv_file = dotenv.find_dotenv() # soh q agora procu5ra o arquivo .env no OS, pq vamos reutilizar ele depois
@@ -131,21 +163,8 @@ def main():
             PATH_ARQUIVO_SAIDA = f.name
 
     ###############################
-    # definir um dia de e horário de trabalho
-    diadetrabalho = businesstimedelta.WorkDayRule(
-        start_time=datetime.time(8),
-        end_time=datetime.time(18),
-        working_days=[0, 1, 2, 3, 4])
-
-    # horario de almoco
-    lunchbreak = businesstimedelta.LunchTimeRule(
-        start_time=datetime.time(12),
-        end_time=datetime.time(13),
-        working_days=[0, 1, 2, 3, 4])
-
-    # combinar os dois
-    #horas_uteis = businesstimedelta.Rules([diadetrabalho, lunchbreak])
-    horas_uteis = businesstimedelta.Rules([diadetrabalho])
+    # inicializa a 
+    calculadora = Calculadora()
 
     quantidade_de_registros_gravados = 0
 
@@ -248,7 +267,7 @@ def main():
 
                 try:
                     bar = FillingCirclesBar('Calculando', max=qt_rows)
-                    bar.width = 50
+                    bar.width = 50 # tamanho da barra
 
                     for row in reader:
                         row_saida = {}
@@ -262,9 +281,9 @@ def main():
                             print('-- Gravou log: {}'.format(msg))
 
                         # adiciona na variavel da saida
-                        #row.append(businesshrs.difference(inicio, end))
-                        bdiff = horas_uteis.difference(inicio, end)
+                        bdiff = calculadora.horas_real(inicio, end)
                         row_saida['TIME_REAL'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
+                        row_saida['HREAL_DECIMAL'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",")
 
                         estado = row[COL_UF]
                         if estado == "":
@@ -309,23 +328,13 @@ def main():
                         # if quantos_feriados_total > 0:
                         #     print('feriados total: {}'.format(quantos_feriados_total))
 
-                        #montar businesstimedelta com os feriados
-                        regras_feriados = businesstimedelta.HolidayRule(feriados)
-
-                        #horas_uteis = businesstimedelta.Rules([diadetrabalho, lunchbreak, regras_feriados])
-                        businesshrs = businesstimedelta.Rules([diadetrabalho, regras_feriados])
-                        bdiff = businesshrs.difference(inicio, end)
+                        bdiff = calculadora.horas_com_feriados(inicio, end, feriados)
                         row_saida['TIME_OK'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
-                        row_saida['TIME_REAL'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
+                        
                         _segs_por_dia = 24*60*60  # horas x minutos x segundos
-                        # row['H_DECIMAL'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",") # formatar em float 0.00
                         #row_saida['H_DECIMAL'] = "{}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",")
-
-                        row_saida['H_DECIMAL'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",")
+                        row_saida['H_DECIMAL'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",") # formatar em float 0.00
                         
-                        row_saida['HREAL_DECIMAL'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",")
-                        
-
                         row_saida[COL_DATA_A] = row[COL_DATA_A]
                         row_saida[COL_DATA_B] = row[COL_DATA_B]
                         row_saida[COL_COD] = row[COL_COD]

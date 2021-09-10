@@ -1,198 +1,346 @@
 import csv
-import numpy as np
-import pandas
 import datetime
+import os
+import tkinter as tk
 from datetime import date
+from tkinter import TclError, filedialog, messagebox, simpledialog
+from progress.bar import FillingCirclesBar
+
 import businesstimedelta
 import holidays
-
-import tkinter as tk
-from tkinter import TclError, filedialog, simpledialog, messagebox
-
-# tela usada na gui, inicia em None, porque precisa ser criada no ambiente
-win = None
-try:
-    win = tk.Tk()
-except TclError:
-    # se tentou criar, e deu problema (nao tem tela por ex), vai ficar win validando None, pra saber que nao pode usar win
-    print('Ops... Não foi possível mostrar tela, use nome fixo de arquivo local')
-    # usar um nome de arquivo local
-    path_selecionado_pela_gui = 'dataspracomparar.csv'
-else:
-    win.withdraw()
-    path_selecionado_pela_gui = filedialog.askopenfilename(filetypes=[("Formato de planilhas", ".csv .xls .xlsx")])
-    #TODO se cancelar esta tela, va gerar erro grave ao tentar abrir arquivo
-
-d1 = datetime.datetime.now()
-arquivo_nome_com_data = d1.strftime("%Y%m%d_%H%M%S")
-
-# definir um dia de e horário de trabalho
-diadetrabalho = businesstimedelta.WorkDayRule(
-    start_time=datetime.time(8),
-    end_time=datetime.time(18),
-    working_days=[0, 1, 2, 3, 4])
-
-# horario de almoco
-lunchbreak = businesstimedelta.LunchTimeRule(
-    start_time=datetime.time(12),
-    end_time=datetime.time(13),
-    working_days=[0, 1, 2, 3, 4])
-
-# combinar os dois
-#horas_uteis = businesstimedelta.Rules([diadetrabalho, lunchbreak])
-horas_uteis = businesstimedelta.Rules([diadetrabalho])
+import numpy as np
+import pandas as pd
+# essa lib carrega variaveis de ambiente e se n houver ele considerars as variaveis declaradas no arquivo .env
+from dotenv import load_dotenv
 
 
-###############################
-# carregar feriados regionais
-df_regionais = pandas.read_csv("holidays_city.csv", quoting=csv.QUOTE_NONE)
+# cabecalho do arquivo de entrada
+CABECALHO_ESPERADO = ['INICIO', 'FINAL', 'SR', 'CODIGO', 'UF']
+CABECALHO_OUTPUT = CABECALHO_ESPERADO + ['CODIGO', 'TIME_REAL', 'TIME_OK', 'H_DECIMAL', 'HREAL_DECIMAL']
 
+def main():
+    # carregar as variaveis de ambiente
+    load_dotenv()
 
-#cabecalho do arquivo de entrada
-cabecalho_esperado = ['INICIO', 'FINAL', 'TEMPO', 'UF']
-cabecalho_output = cabecalho_esperado + ['TIME_REAL', 'TIME_OK', 'H_DECIMAL', 'CITY']
+    PATH_ARQUIVO_BASE = os.getenv('ARQUIVO_BASE', "")
+    PATH_ARQUIVO_CIDADES = os.getenv('ARQUIVO_CIDADES', "")
+    FORMAT_DT_INICIO = os.getenv('FORMAT_DT_INI', '%d/%m/%Y %H:%M')
+    FORMAT_DT_FINAL = os.getenv('FORMAT_DT_FIM', '%d/%m/%Y %H:%M')
+    UF_DEFAULT = os.getenv('UF_DEFAULT', 'SP')
+    FORMAT_DT_CIDADES = os.getenv('FORMAT_DT_CIDADES', "%d/%m/%Y")
+    DELIMITADOR = os.getenv('DELIMITADOR', 'auto')
 
-quantidade_de_registros_gravados = 0
+    # tela usada na gui, inicia em None, porque precisa ser criada no ambiente
+    win = None
+    try:
+        win = tk.Tk()
+    except TclError:
+        # se tentou criar, e deu problema (nao tem tela por ex), vai ficar win validando None, pra saber que nao pode usar win
+        print('Ops... Não foi possível criar tela, sera usado apenas terminal')
+    else:
+        # como nao queremos uma GUI inteira e sim apenas mostrar alguns Dialogs, se previne a janela root de aparecer
+        win.withdraw()
 
-with open(path_selecionado_pela_gui,'r') as data_input:
-    # alguns testes basicos com o arquivo de entrada
+    ####################################
+    # arquivo BASE precisa existir
+    while os.path.exists(PATH_ARQUIVO_BASE) is False:
 
-    #para isso le os primeiros 1024 bytes, aumentar se achar que nao for suficiente, mas geralmente supre.
-    inicio_do_arquivo = data_input.read(1024)
+        # nao existe, entao pergunta onde arquivo esta abre Dialog perguntando onde o arquivo  esta
+        if win is None:
+            # pergunta no terminal
+            PATH_ARQUIVO_BASE = input(
+                "Informe o arquivo base para processar (deixe em branco para cancelar): ")
+        else:
+            # ou pergunta em Dialog
+            PATH_ARQUIVO_BASE = filedialog.askopenfilename(
+                title="Informe o arquivo CSV para processar",
+                filetypes=[("Comma Separated Values - CSV", ".csv")])
+
+        # se o usuario cancelar essa seleccao, retornara um None, entao interrompe programa pois esse arquivo eh fundamental
+        if PATH_ARQUIVO_BASE is None or PATH_ARQUIVO_BASE == '':
+            msg = "Você cancelou a seleção do arquivo ❌."
     
-    tem_cabecalho = csv.Sniffer().has_header(inicio_do_arquivo)
-    if not tem_cabecalho:
-        _mensagem_de_erro = "Sem cabeçalho neste arquivo, é necessário que possua estes:\n{}".format(cabecalho_esperado)
+            if win is None:
+                print(msg)
+            else:
+                messagebox.showwarning('Seleção cancelada', msg)
+
+            #encerra tudo
+            exit()
+
+        # primeiro testa se o nome do arquivo esta completo
+        if os.path.isabs(PATH_ARQUIVO_BASE) is False:
+            # monta um minimo completo aceitavel entao
+            PATH_ARQUIVO_BASE = os.path.join('.', PATH_ARQUIVO_BASE)
+
+            # retorna pro inicio desse while pra testar novamente se arquivo existe
+            continue
+
+    ###############################
+    # carregar arquivo de feriados regionais
+    df_regionais = None
+    if os.path.exists(PATH_ARQUIVO_CIDADES) is False:
         if win is None:
-            print(_mensagem_de_erro)
+            PATH_ARQUIVO_CIDADES = input(
+                "Selecionar arquivo de feriados municipais com cod. IBGE: ")
         else:
-            messagebox.showerror("Arquivo inválido", _mensagem_de_erro)
-        exit
+            PATH_ARQUIVO_CIDADES = filedialog.askopenfilename(
+                title="Informe o arquivo com feriados de cidades",
+                filetypes=[("Formato de planilhas", ".csv")])
 
-    # Analisar se existe algum separador, isso pode funcionar para todos os tipos.
-    dialect = csv.Sniffer().sniff(inicio_do_arquivo)
-    if dialect is None or dialect.delimiter == ' ' or dialect.delimiter == '':
-        #poderia perguntar qual delimitador usar, logo fica a mercê do usuário.
-        #se possuir tela (win), então chama dialog
+        if PATH_ARQUIVO_CIDADES is None or PATH_ARQUIVO_CIDADES == '':
+            print("Usuário cancelou a seleção dos feriados municipais, continuando o calculo sem.")
+            PATH_ARQUIVO_CIDADES = None
+        else:
+            # primeiro testa se o nome do arquivo esta completo
+            if os.path.isabs(PATH_ARQUIVO_CIDADES) is False:
+                # monta um minimo completo aceitavel entao
+                PATH_ARQUIVO_CIDADES = os.path.join('.', PATH_ARQUIVO_CIDADES)
+
+            # sep=None faz o pandas testar os separador ideal automaticamente
+            print("Abrindo calendário de cidades {}".format(PATH_ARQUIVO_CIDADES))
+            df_regionais = pd.read_csv(
+                PATH_ARQUIVO_CIDADES, sep=None if DELIMITADOR == 'auto' else DELIMITADOR, quoting=csv.QUOTE_NONE)
+
+            # TODO devia testar aqui se esta ok com esse arquivo..
+
+    ##################################################
+    # arquivo de saída
+    d1 = datetime.datetime.now()
+    arquivo_nome_com_data = d1.strftime("%Y%m%d_%H%M%S")
+    PATH_ARQUIVO_SAIDA = f'{arquivo_nome_com_data}.csv'
+    # aqui eh o inverso, SE o arquivo de saida existir, dai pergunta um outro nome
+    if os.path.exists(PATH_ARQUIVO_SAIDA):
+        # confirma onde salvar o arquivo destino
         if win is None:
-            separador = input("Qual delimitador usar: ")
+            f = input("Salvar arquivo de saída: ")
         else:
-            separador = simpledialog.askstring("Questão", "Qual separador usar?")
+            f = filedialog.asksaveasfile(
+                    title="Informe Arquivo de saída",
+                    initialfile=f'{arquivo_nome_com_data}.csv', 
+                    defaultextension=".csv", 
+                    filetypes=[("Tabela csv", "*.csv"), ("Documento texto", "*.txt")])
+            if f is None:
+                # Se a seleção do local é cancelada, então é encerrado.
+                return
+            # extrair o filename do objeto retornado pela tela
+            PATH_ARQUIVO_SAIDA = f.name
+
+    ###############################
+    # definir um dia de e horário de trabalho
+    diadetrabalho = businesstimedelta.WorkDayRule(
+        start_time=datetime.time(8),
+        end_time=datetime.time(18),
+        working_days=[0, 1, 2, 3, 4])
+
+    # horario de almoco
+    lunchbreak = businesstimedelta.LunchTimeRule(
+        start_time=datetime.time(12),
+        end_time=datetime.time(13),
+        working_days=[0, 1, 2, 3, 4])
+
+    # combinar os dois
+    #horas_uteis = businesstimedelta.Rules([diadetrabalho, lunchbreak])
+    horas_uteis = businesstimedelta.Rules([diadetrabalho])
+
+    quantidade_de_registros_gravados = 0
+
+    print("Abrindo arquivo {}".format(PATH_ARQUIVO_BASE))
+    with open(PATH_ARQUIVO_BASE, 'r') as data_input:
+        # alguns testes basicos com o arquivo de entrada
+
+        # para isso le os primeiros 1024 bytes, aumentar se achar que nao for suficiente, mas geralmente supre.
+        inicio_do_arquivo = data_input.read(1024)
+
+        tem_cabecalho = csv.Sniffer().has_header(inicio_do_arquivo)
+        if not tem_cabecalho:
+            _msg = "Sem cabeçalho neste arquivo, é necessário que possua estes:\n{}".format(CABECALHO_ESPERADO)
+            if win is None:
+                print(_msg)
+            else:
+                messagebox.showerror("Arquivo inválido ☹", _msg)
+            return
+
+        # Se deve ou nao usar um analisador de separador
+        if DELIMITADOR.lower() == 'auto':
+            # Tentar detectar automaticamente
+            dialect = csv.Sniffer().sniff(inicio_do_arquivo)
+            if dialect is None or dialect.delimiter == ' ' or dialect.delimiter == '':
+                # poderia perguntar qual delimitador usar, logo fica a mercê do usuário.
+                # se possuir tela (win), então chama dialog
+                if win is None:
+                    separador = input("Qual delimitador usar: ")
+                else:
+                    separador = simpledialog.askstring("Questão", "Qual separador usar?")
+
+                # Reverifica caso a condição seja cancelada pelo usuário
+                if separador is None or separador == ' ' or separador == '':
+                    # utilizar o do arquivo .env
+                    separador = DELIMITADOR
+            else:
+                separador = dialect.delimiter
+        else:
+            separador = DELIMITADOR
+
+        # volta para o inicio do arquivo
+        data_input.seek(0)
+
+        # agora assim abrir o arquvo para ler as linhas
+        reader = csv.DictReader(data_input, delimiter=separador)
+
+        # get fieldnames from DictReader object and store in list
+        headers = reader.fieldnames
+        print("Cabeçalhos encontrados:" + str(headers))
+
+        # if row != cabecalho_esperado:
+        #    if win is None:
+        #        print("Ops! Arquivo inválido! ☹")
+        #    else:
+        #        messagebox.showerror("Cabeçalho Inválido ☹", "Use estes separados por ponto e vírgula: {}".format(validado))
+        #    #de qquer forma encerra
+        #    exit
+
+        # mudar essa validacao simples para
+
+        #headers = []
+        # for row in reader:
+        #    headers = [x.lower() for x in list(row.keys())]
+        #    break
+
+        # if 'minha ccoluna' not in headers or 'id_nome' not in headers:
+        #    print('Arquivo CSV precisa ter as colunas "Minha Coluna" e a coluna "ID_Nome"')
         
-        # Reverifica caso a condição seja cancelada pelo usuário (if win...)
-        if separador is None or separador == ' ' or separador == '':
-            separador = ','
+        #maneira mais rapida que sei pra contar quantas linhas tem eh assim:
+        qt_rows = sum(1 for _ in reader)
+        data_input.seek(0)
+        reader.__init__(data_input, delimiter=separador)
+        print("Quantidade de linhas do arquivo: {} rows".format(qt_rows))
 
-    else:
-        separador = dialect.delimiter
+        # abre arquivo de saida
+        print("Abrindo arquivo de saida {}".format(PATH_ARQUIVO_SAIDA))
+        with open(PATH_ARQUIVO_SAIDA, 'w') as arquivo_output:
+            with open(PATH_ARQUIVO_SAIDA+'.err', 'a') as arquivo_erros:
+                writer = csv.DictWriter(arquivo_output, CABECALHO_OUTPUT, lineterminator='\n')
 
-    #volta para o inicio do arquivo
-    data_input.seek(0)
+                # escreve cabecalho novo
+                writer.writeheader()
 
-    # agora assim abrir o arquvo para ler as linhas
-    reader = csv.DictReader(data_input, delimiter=separador)
+                # variavel que contera todas as linhas do arquivo original, eh incrementada
+                # enquanto fica lendo no loop abaixo, e será gravada de uma só vez no final
+                all_rows = []
 
-    #get fieldnames from DictReader object and store in list
-    headers = reader.fieldnames
-    print("Cabecalhos encontrados:" + str(headers))
+                try:
+                    bar = FillingCirclesBar('Calculando', max=qt_rows)
 
-    #if row != cabecalho_esperado:
-    #    if win is None:
-    #        print("Ops! Arquivo inválido! ☹")
-    #    else:
-    #        messagebox.showerror("Cabeçalho Inválido ☹", "Use estes separados por ponto e vírgula: {}".format(validado))
-    #    #de qquer forma encerra
-    #    exit
-        
-    #mudar essa validacao simples para
+                    for row in reader:
+                        row_saida = {}
 
-    #headers = []
-    #for row in reader:
-    #    headers = [x.lower() for x in list(row.keys())]
-    #    break
+                        inicio = datetime.datetime.strptime(row['INICIO'], FORMAT_DT_INICIO)
+                        end = datetime.datetime.strptime(row['FINAL'], FORMAT_DT_FINAL)
 
-    #if 'minha ccoluna' not in headers or 'id_nome' not in headers:
-    #    print('Arquivo CSV precisa ter as colunas "Minha Coluna" e a coluna "ID_Nome"')
+                        if inicio > end:
+                            msg = "Data retroativa linha {} SR: {}".format(reader.line_num-1, row['SR'])
+                            arquivo_erros.write("{}\n".format(msg))
+                            print('-- Gravou log: {}'.format(msg))
 
-    # confirma onde salvar o arquivo destino
-    if win is None:
-        nome_arquivo_saida = f'{arquivo_nome_com_data}.csv'
-    else:
-        f = filedialog.asksaveasfile(initialfile = f'{arquivo_nome_com_data}.csv', defaultextension=".csv",filetypes=[("Tabela csv","*.csv"),("Documento texto","*.txt")])
-        if f is None:
-            # Se a seleção do local é cancelada, então é encerrado.
-            exit
-        # extrair o filename do objeto retornado pela tela
-        nome_arquivo_saida = f.name
+                        # adiciona na variavel da saida
+                        #row.append(businesshrs.difference(inicio, end))
+                        bdiff = horas_uteis.difference(inicio, end)
+                        row_saida['TIME_REAL'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
 
-    #abre arquivo de saida
-    with open(nome_arquivo_saida, 'w') as arquivo_output:
-        with open(nome_arquivo_saida+'.err', 'a') as arquivo_erros:
-            writer = csv.DictWriter(arquivo_output, cabecalho_output, lineterminator='\n')
-            
-            #escreve cabecalho novo
-            writer.writeheader()
-            
-            # variavel que contera todas as linhas do arquivo original, eh incrementada 
-            # enquanto fica lendo no loop abaixo, e será gravada de uma só vez no final 
-            all_rows = []
+                        estado = row['UF']
+                        if estado == "":
+                            estado = UF_DEFAULT
+                        feriados = holidays.BR(state=estado)
 
-            try:
-                for row in reader:
-                    row_saida = {}
+                        # armazenar aqui quantos feriados municipais encontrou
+                        quantos_feriados_municipio = 0
+
+                        # adicionar os regionais SE conseguiu usar o arquivo de CIDADES
+                        if df_regionais is not None:
+                            city = row['CODIGO']
+                            if city != '':
+                                requer_df = df_regionais[df_regionais['CODIGO_MUNICIPIO'] == int(city)]
+
+                                # CODIGO_MUNICIPIO,DATE,UF,NOME_MUNICIPIO
+                                if requer_df is not None:
+                                    for r in requer_df['DATE'].to_list():
+
+                                        # limpar as aspas, trocar traço por barra
+                                        r = r.replace('"', "").replace("'", "").replace("-", "/")
+
+                                        # converter a data em formato PT-BR para date de python
+                                        dateObj = datetime.datetime.strptime(r, FORMAT_DT_CIDADES).date()
+
+                                        # adicionar aos feriados a serem considerados
+                                        feriados.append(dateObj)
+
+                                        quantos_feriados_municipio += 1
+                                        print("cidade: {} tem feriado em {}".format(city, r))
+                                    print('feriados no municipio {}: {}'.format(city, quantos_feriados_municipio))
+                                else:
+                                    print('Cidade não encontrada {}'.format(city))
+                        
+                        # contar quantidade de feriados no periodo
+                        # quantos_feriados_total = 0
+                        # df = pd.DataFrame()
+                        # df['Datas'] = pd.date_range(inicio, end)
+                        # for val in df['Datas']:
+                        #     if str(val).split()[0] in feriados:
+                        #         quantos_feriados_total += 1
+                        # if quantos_feriados_total > 0:
+                        #     print('feriados total: {}'.format(quantos_feriados_total))
+
+                        #montar businesstimedelta com os feriados
+                        regras_feriados = businesstimedelta.HolidayRule(
+                            feriados)
+
+                        #horas_uteis = businesstimedelta.Rules([diadetrabalho, lunchbreak, regras_feriados])
+                        businesshrs = businesstimedelta.Rules([diadetrabalho, regras_feriados])
+                        bdiff = businesshrs.difference(inicio, end)
+                        row_saida['TIME_OK'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
+                        row_saida['TIME_REAL'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
+                        _segs_por_dia = 24*60*60  # horas x minutos x segundos
+                        # row['H_DECIMAL'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",") # formatar em float 0.00
+                        #row_saida['H_DECIMAL'] = "{}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",")
+
+                        row_saida['H_DECIMAL'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",")
+                        
+                        row_saida['HREAL_DECIMAL'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",")
+                        
+
+                        row_saida['INICIO'] = row['INICIO']
+                        row_saida['FINAL'] = row['FINAL']
+                        row_saida['SR'] = row['SR']
+                        row_saida['CODIGO'] = row['CODIGO']
+                        row_saida['UF'] = row['UF']
+
+                        all_rows.append(row_saida)
+
+                        #
+                        #print('pressando linha: {}'.format(reader.line_num-1))
+                        #print(".", end =" ")
+                        bar.next()
                     
-                    inicio = datetime.datetime.strptime(row['INICIO'], '%d/%m/%Y %H:%M')
-                    end = datetime.datetime.strptime(row['FINAL'], '%d/%m/%Y %H:%M')
+                    bar.finish()
 
-                    if inicio > end:
-                        msg = "Datas invertidas linha {}".format(reader.line_num-1)
-                        arquivo_erros.write("{}\n".format(msg))
+                except csv.Error as e:
+                    msg = 'Erro ao ler {}, linha {}: {}'.format(
+                        PATH_ARQUIVO_SAIDA, reader.line_num-1, e)
+                    if win is None:
                         print(msg)
+                    else:
+                        messagebox.showerror(msg)
 
-                    # adiciona na variavel da saida
-                    #row.append(businesshrs.difference(inicio, end))
-                    bdiff = horas_uteis.difference(inicio, end)
-                    row['TIME_REAL'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
+                # escreve toda variavel par3a arquivo
+                writer.writerows(all_rows)
+                quantidade_de_registros_gravados = len(all_rows)
 
-                    estado = row['UF']
-                    if estado == "":
-                        estado = 'SP'
-                    feriados = holidays.BR(state=estado)
-
-                    #adicionar os regionais
-                    city = row['CITY']
-                    if city != '':
-                        requer_df = df_regionais[df_regionais['cod']==int(city)]
-                        if requer_df is not None:
-                            for r in requer_df['dt'].to_list():
-                                print("cidade: {} tem feriado em {}".format(city, r.replace('"', "").replace("'", "")))
-                            feriados.append(requer_df['dt'].to_list())
-                        else:
-                            print('n achou cidade')
-
-                    regras_feriados = businesstimedelta.HolidayRule(feriados)
-
-                    #horas_uteis = businesstimedelta.Rules([diadetrabalho, lunchbreak, regras_feriados])
-                    businesshrs = businesstimedelta.Rules([diadetrabalho, regras_feriados])
-                    bdiff = businesshrs.difference(inicio, end)
-                    row['TIME_OK'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
-
-                    _segs_por_dia = 24*60*60 # horas x minutos x segundos
-                    #row['H_DECIMAL'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",") # formatar em float 0.00
-                    row['H_DECIMAL'] = "{}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",")
-
-                    all_rows.append(row)
-
-            except csv.Error as e:
-                print('erro lendo {}, linha {}: {}'.format(nome_arquivo_saida,reader.line_num-1, e))
-            
-            #escreve toda variavel par3a arquivo
-            writer.writerows(all_rows)
-            quantidade_de_registros_gravados = len(all_rows)
-
-#finaliza com alguma msg pro usuario
-msg = 'Processou {} registros'.format(quantidade_de_registros_gravados)
-if writer is None:
+    # finaliza com alguma msg pro usuario
+    msg = 'Foram processados {} registros, verifique os logs no arquivo ".err" '.format(quantidade_de_registros_gravados)
+    if win:
+        messagebox.showinfo("Encerrado", msg)
     print(msg)
-else:
-    messagebox.showinfo("Encerrou", msg)
+
+if __name__ == "__main__":
+    main()

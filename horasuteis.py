@@ -11,7 +11,7 @@ import holidays
 import numpy as np
 import pandas as pd
 # essa lib carrega variaveis de ambiente e se n houver ele considerars as variaveis declaradas no arquivo .env
-from dotenv import load_dotenv
+import dotenv
 
 
 # cabecalho do arquivo de entrada
@@ -20,7 +20,8 @@ CABECALHO_OUTPUT = CABECALHO_ESPERADO + ['CODIGO', 'TIME_REAL', 'TIME_OK', 'H_DE
 
 def main():
     # carregar as variaveis de ambiente
-    load_dotenv()
+    dotenv_file = dotenv.find_dotenv() # soh q agora procura o arquivo .env no OS, pq vamos reutilizar ele depois
+    dotenv.load_dotenv(dotenv_file)
 
     PATH_ARQUIVO_BASE = os.getenv('ARQUIVO_BASE', "")
     PATH_ARQUIVO_CIDADES = os.getenv('ARQUIVO_CIDADES', "")
@@ -99,10 +100,19 @@ def main():
 
             # sep=None faz o pandas testar os separador ideal automaticamente
             print("Abrindo calendário de cidades {}".format(PATH_ARQUIVO_CIDADES))
-            df_regionais = pd.read_csv(
-                PATH_ARQUIVO_CIDADES, sep=None if DELIMITADOR == 'auto' else DELIMITADOR, quoting=csv.QUOTE_NONE)
+            try:
+                df_regionais = pd.read_csv(
+                    PATH_ARQUIVO_CIDADES, sep=None if DELIMITADOR == 'auto' else DELIMITADOR, quoting=csv.QUOTE_NONE)
+            except pd.errors.EmptyDataError:
+                print('Arquivo está vazio: {}'.format(PATH_ARQUIVO_CIDADES))
+            except:
+                print('Erro ao abrir {}'.format(PATH_ARQUIVO_CIDADES))
+            #else:
+                # TODO devia testar aqui se esta ok com esse arquivo..
+            finally:
+                # já q abriu, memoriza esse nome de arquivo pra facilitar na proxima execução
+                dotenv.set_key(dotenv_file, 'ARQUIVO_CIDADES', PATH_ARQUIVO_CIDADES)
 
-            # TODO devia testar aqui se esta ok com esse arquivo..
 
     ##################################################
     # arquivo de saída
@@ -147,6 +157,10 @@ def main():
 
     print("Abrindo arquivo {}".format(PATH_ARQUIVO_BASE))
     with open(PATH_ARQUIVO_BASE, 'r') as data_input:
+
+        # já q abriu, memoriza esse nome de arquivo pra facilitar na proxima execução
+        dotenv.set_key(dotenv_file, 'ARQUIVO_BASE', PATH_ARQUIVO_BASE)
+        
         # alguns testes basicos com o arquivo de entrada
 
         # para isso le os primeiros 1024 bytes, aumentar se achar que nao for suficiente, mas geralmente supre.

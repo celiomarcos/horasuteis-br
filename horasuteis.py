@@ -61,14 +61,21 @@ def main():
 
     COL_DATA_A = os.getenv('COL_DATA_A', 'INICIO')
     COL_DATA_B = os.getenv('COL_DATA_B', 'FINAL')
+    COL_DATA_C = os.getenv('COL_DATA_C', '')
     COL_COD = os.getenv('COL__COD', 'SR') 
     COL_MUNICIPIO = os.getenv('COL_MUNICIO', 'CODIGO')
     COL_UF = os.getenv('COL_UF', 'UF')
 
+    CONTAR_FERIADOS_UF = os.getenv('CONTAR_FERIADOS_UF', '')
+    
     # cabecalho do arquivo de entrada
     CABECALHO_ESPERADO = [COL_DATA_A, COL_DATA_B, COL_COD, COL_MUNICIPIO, COL_UF]
-    CABECALHO_OUTPUT = CABECALHO_ESPERADO + ['TIME_REAL', 'TIME_OK', 'H_DECIMAL', 'HREAL_DECIMAL']
+    CABECALHO_OUTPUT = CABECALHO_ESPERADO + ['FERIADOS_UF', 'FERIADOS_CITY', 'TIME_REAL', 'TIME_OK', 'H_DECIMAL', 'HREAL_DECIMAL']
 
+    # se definiu coluna C entao prepara os cabecalhos
+    if COL_DATA_C != "":
+        CABECALHO_OUTPUT += [COL_DATA_C, 'FERIADOS_UF_C', 'FERIADOS_CITY_C', 'TIME_REAL_BC', 'TIME_OK_BC', 'H_DECIMAL_BC', 'HREAL_DECIMAL_BC', 'FERIADOS_UF_BC', 'FERIADOS_CITY_BC', 'TIME_REAL_AC', 'TIME_OK_AC', 'H_DECIMAL_AC', 'HREAL_DECIMAL_AC',]
+        
     #TODO montar os cabecalhos por aqui logo dps de definiar quais sao
 
     # tela usada na gui, inicia em None, porque precisa ser criada no ambiente
@@ -232,7 +239,7 @@ def main():
             if win is None:
                print("Ops! Cabecalho de Arquivo inválido! ☹")
             else:
-               messagebox.showerror("Cabeçalho Inválido ☹", "Use estes separados por ponto e vírgula: {}".format(CABECALHO_ESPERADO))
+               messagebox.showerror("Cabeçalho Inválido ☹", "Use estes separados por '{}': {}".format(separador, CABECALHO_ESPERADO))
             #de qquer forma encerra
             return
 
@@ -277,7 +284,7 @@ def main():
 
                         if inicio > end:
                             msg = "Data retroativa linha {} SR: {}".format(reader.line_num-1, row[COL_COD])
-                            arquivo_erros.write("{}\n".format(msg))
+                            arquivo_erros.write("data retroativa,{},{},{},{}\n".format(reader.line_num-1, row[COL_COD], inicio, end))
                             print('-- Gravou log: {}'.format(msg))
 
                         # adiciona na variavel da saida
@@ -291,10 +298,11 @@ def main():
                         feriados = holidays.BR(state=estado)
 
                         # armazenar aqui quantos feriados municipais encontrou
-                        quantos_feriados_municipio = 0
+                        quantos_feriados_municipio = None
 
                         # adicionar os regionais SE conseguiu usar o arquivo de CIDADES
                         if df_regionais is not None:
+                            quantos_feriados_municipio = 0
                             city = row[COL_MUNICIPIO]
                             if city != '':
                                 requer_df = df_regionais[df_regionais['CODIGO_MUNICIPIO'] == int(city)]
@@ -315,18 +323,24 @@ def main():
                                         quantos_feriados_municipio += 1
                                         print("cidade: {} tem feriado em {}".format(city, r))
                                     print('feriados no municipio {}: {}'.format(city, quantos_feriados_municipio))
+                                    
                                 else:
                                     print('Cidade não encontrada {}'.format(city))
-                        
+                        row_saida['FERIADOS_CITY'] = quantos_feriados_municipio
+
                         # contar quantidade de feriados no periodo
-                        # quantos_feriados_total = 0
-                        # df = pd.DataFrame()
-                        # df['Datas'] = pd.date_range(inicio, end)
-                        # for val in df['Datas']:
-                        #     if str(val).split()[0] in feriados:
-                        #         quantos_feriados_total += 1
-                        # if quantos_feriados_total > 0:
-                        #     print('feriados total: {}'.format(quantos_feriados_total))
+                        quantos_feriados_uf = None
+                        if CONTAR_FERIADOS_UF == 'true':
+                            quantos_feriados_uf = 0
+                            df = pd.DataFrame()
+                            df['Datas'] = pd.date_range(inicio, end)
+                            for val in df['Datas']:
+                                if str(val).split()[0] in feriados:
+                                    quantos_feriados_uf += 1
+                            if quantos_feriados_uf > 0:
+                                print('feriados UF: {}'.format(quantos_feriados_uf))
+                        row_saida['FERIADOS_UF'] = quantos_feriados_uf
+
 
                         bdiff = calculadora.horas_com_feriados(inicio, end, feriados)
                         row_saida['TIME_OK'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
@@ -334,7 +348,50 @@ def main():
                         _segs_por_dia = 24*60*60  # horas x minutos x segundos
                         #row_saida['H_DECIMAL'] = "{}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",")
                         row_saida['H_DECIMAL'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",") # formatar em float 0.00
-                        
+
+                        if COL_DATA_C != '':
+                            data_c = datetime.datetime.strptime(row[COL_DATA_C], FORMAT_DT_FINAL)
+                            if end < data_c:
+                                bdiff = calculadora.horas_real(end, data_c)
+                                row_saida['TIME_REAL_BC'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
+                                row_saida['HREAL_DECIMAL_BC'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",")
+
+                                bdiff = calculadora.horas_com_feriados(end, data_c, feriados)
+                                row_saida['TIME_OK_BC'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
+                                row_saida['H_DECIMAL_BC'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",") # formatar em float 0.00
+
+                                quantos_feriados_uf = '-'
+                                if CONTAR_FERIADOS_UF == 'true':
+                                    quantos_feriados_uf = 0
+                                    df = pd.DataFrame()
+                                    df['Datas'] = pd.date_range(end, data_c)
+                                    for val in df['Datas']:
+                                        if str(val).split()[0] in feriados:
+                                            quantos_feriados_uf += 1
+                                    if quantos_feriados_uf > 0:
+                                        print('feriados UF: {}'.format(quantos_feriados_uf))
+                                row_saida['FERIADOS_UF_BC'] = quantos_feriados_uf
+                            else:
+                                # guardar log de datas invertidas
+                                msg = "Data retroativa linha {} SR: {}".format(reader.line_num-1, row[COL_COD])
+                                arquivo_erros.write("data retroativa,{},{},{},{}\n".format(reader.line_num-1, row[COL_COD], end, data_c))
+                                print('-- log data_C: {}'.format(msg))
+                            
+
+
+                            bdiff = calculadora.horas_real(inicio, data_c)
+                            row_saida['TIME_REAL_AC'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
+                            row_saida['HREAL_DECIMAL_AC'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",")
+
+                            bdiff = calculadora.horas_com_feriados(inicio, data_c, feriados)
+                            row_saida['TIME_OK_AC'] = "{}:{}:00".format(bdiff.hours, f"{int(bdiff.seconds/60):02d}")
+                            row_saida['H_DECIMAL_AC'] = "{:.2f}".format(bdiff.hours+(bdiff.seconds/60/60)).replace(".", ",") # formatar em float 0.00
+
+                            
+                            #levar a coluna data_C pro arquivo de saida
+                            row_saida[COL_DATA_C] = row[COL_DATA_C]
+
+
                         row_saida[COL_DATA_A] = row[COL_DATA_A]
                         row_saida[COL_DATA_B] = row[COL_DATA_B]
                         row_saida[COL_COD] = row[COL_COD]

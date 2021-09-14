@@ -5,6 +5,7 @@ import tkinter as tk
 from datetime import date
 from tkinter import TclError, filedialog, messagebox, simpledialog
 from progress.bar import FillingCirclesBar
+import chardet
 
 import businesstimedelta
 import holidays
@@ -132,11 +133,14 @@ def main():
             print("Usuário cancelou a seleção dos feriados municipais, continuando o calculo sem.")
             PATH_ARQUIVO_CIDADES = None
         else:
+            # testing file encoding
+            file_encoding = encoding_detector(PATH_ARQUIVO_CIDADES)
+
             # sep=None faz o pandas testar os separador ideal automaticamente
             print("Abrindo calendário de cidades {}".format(PATH_ARQUIVO_CIDADES))
             try:
                 df_regionais = pd.read_csv(
-                    PATH_ARQUIVO_CIDADES, sep=None if DELIMITADOR == 'auto' else DELIMITADOR, quoting=csv.QUOTE_NONE)
+                    PATH_ARQUIVO_CIDADES, sep=None if DELIMITADOR == 'auto' else DELIMITADOR, quoting=csv.QUOTE_NONE, encoding=file_encoding)
             except pd.errors.EmptyDataError:
                 print('Arquivo está vazio: {}'.format(PATH_ARQUIVO_CIDADES))
             except:
@@ -174,9 +178,12 @@ def main():
     calculadora = Calculadora()
 
     quantidade_de_registros_gravados = 0
-
+    
+    # testing file encoding
+    file_encoding = encoding_detector(PATH_ARQUIVO_BASE)
+    
     print("Abrindo arquivo {}".format(PATH_ARQUIVO_BASE))
-    with open(PATH_ARQUIVO_BASE, 'r') as data_input:
+    with open(PATH_ARQUIVO_BASE, 'r', encoding=file_encoding) as data_input:
 
         # já q abriu, memoriza esse nome de arquivo pra facilitar na proxima execução
         dotenv.set_key(dotenv_file, 'ARQUIVO_BASE', PATH_ARQUIVO_BASE)
@@ -424,6 +431,14 @@ def main():
     if win:
         messagebox.showinfo("Encerrado", msg)
     print(msg)
+
+def encoding_detector(arq):
+    result = 'utf-8'
+    with open(arq, 'rb') as rawdata:
+        cd = chardet.detect(rawdata.read(10000))
+        result = cd['encoding']
+        print('arquivo {} do tipo {} ({} de certeza)'.format(arq, result, cd['confidence']))
+    return result
 
 if __name__ == "__main__":
     main()

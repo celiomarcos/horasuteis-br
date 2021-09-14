@@ -2,3 +2,4 @@ businesstimedelta
 holidays
 python-dotenv
 progress
+chardet

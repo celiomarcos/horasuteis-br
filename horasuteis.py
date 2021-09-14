@@ -6,6 +6,9 @@ from datetime import date
 from tkinter import TclError, filedialog, messagebox, simpledialog
 from progress.bar import FillingCirclesBar
 import chardet
+from timeit import default_timer as timer
+from datetime import timedelta
+
 
 import businesstimedelta
 import holidays
@@ -279,6 +282,9 @@ def main():
                 # enquanto fica lendo no loop abaixo, e será gravada de uma só vez no final
                 all_rows = []
 
+                # begin take this moment reference to count seconds of exectuion from thispoint
+                start_timer = timer()
+
                 try:
                     bar = FillingCirclesBar('Calculando', max=qt_rows)
                     bar.width = 50 # tamanho da barra
@@ -422,12 +428,15 @@ def main():
                     else:
                         messagebox.showerror(msg)
 
+                #calculate the execution time
+                time_expended = timedelta(seconds=timer()-start_timer)
+
                 # escreve toda variavel par3a arquivo
                 writer.writerows(all_rows)
                 quantidade_de_registros_gravados = len(all_rows)
 
     # finaliza com alguma msg pro usuario
-    msg = 'Foram processados {} registros, verifique os logs no arquivo ".err" '.format(quantidade_de_registros_gravados)
+    msg = 'Foram processados {} registros em {} segundos.\nVerifique os logs no arquivo "{}.err" '.format(quantidade_de_registros_gravados, time_expended, PATH_ARQUIVO_SAIDA)
     if win:
         messagebox.showinfo("Encerrado", msg)
     print(msg)
